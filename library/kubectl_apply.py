@@ -1,6 +1,7 @@
 import os
 import json
 import subprocess
+import tempfile
 import yaml
 
 from ansible.module_utils.basic import AnsibleModule, BOOLEANS
@@ -33,7 +34,7 @@ class KubectlApplier(object):
         self.inline = inline
 
         # Loads as a dict, convert to a json string for piping to kubectl:
-        self.inline = json.dumps(inline)
+        #self.inline = json.dumps(inline)
 
         self.cmds = ["kubectl", "apply", "-f", "-"]
         self.cmd_runner = KubectlRunner(self.kubeconfig)
@@ -59,17 +60,37 @@ def main():
         kubeconfig=dict(required=True, type='dict'),
         namespace=dict(required=True, type='str'),
         debug=dict(required=False, choices=BOOLEANS, default='false'),
-        inline=dict(required=False, type='dict'),
+        inline=dict(required=False, type='str'),
     ))
 
     # Validate module inputs:
 
+    kubeconfig = module.params['kubeconfig']
+    kubeconfig_file = None
+    temp_kubeconfig_path = None
+    if 'file' in kubeconfig and 'inline' in kubeconfig:
+        pass # TODO: error here
+    if 'file' in kubeconfig:
+        # TODO: copy the kubeconfig for safety reasons.
+        kubeconfig_file = kubeconfig['file']
+    elif 'inline' in kubeconfig:
+        tmpfile, temp_kubeconfig_path = tempfile.mkstemp()
+        tmpfile = open(tmpfile, 'w')
+        tmpfile.write(kubeconfig['inline'])
+        tmpfile.close()
+        kubeconfig_file = temp_kubeconfig_path
+
     applier = KubectlApplier(
-            kubeconfig=module.params['kubeconfig']['file'],
+            kubeconfig=kubeconfig_file,
             namespace=module.params['namespace'],
             inline=module.params['inline'],
             debug=module.boolean(module.params['debug']))
     exit_code, stdout, stderr = applier.run()
+
+    # Cleanup:
+    # TODO: wrap the above in try?
+    if temp_kubeconfig_path:
+        os.remove(temp_kubeconfig_path)
 
     module.exit_json(
             changed=applier.changed,

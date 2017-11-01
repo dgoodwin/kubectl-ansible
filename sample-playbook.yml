@@ -3,17 +3,14 @@
   run_once: true
   tasks:
 
-  # Create a namespace using inline yaml.
+  # Create a namespace using inline yaml:
   - kubectl_apply:
       kubeconfig:
-        # Use a kubeconfig file on the target host. Also support inline which
-        # could be used with ansible's file lookup to use a kubeconfig on the control host.
+        # Kubeconfig file on the remote host:
         file: /etc/origin/master/admin.kubeconfig
       namespace: default
-      #files:
-        #- configmap.yml
-      #binary: oc
-      inline:
+      # You can specify your kubernetes config inline if desired. The | is important here:
+      inline: |
         kind: "Namespace"
         apiVersion: v1
         metadata:
@@ -21,4 +18,19 @@
     register: ns_apply_reg
 
   - debug: var=ns_apply_reg
+
+  # Use a kubeconfig and configmap definition from the local control host filesystem:
+  - set_fact:
+      local_kubeconfig: "{{ lookup('file', 'admin.kubeconfig') }}"
+      configmap: "{{ lookup('file', 'configmap.yml') }}"
+
+  - kubectl_apply:
+      kubeconfig:
+        inline: "{{ local_kubeconfig }}"
+      namespace: default
+      inline: "{{ configmap }}"
+    register: ns_apply_reg
+
+  - debug: var=ns_apply_reg
+
 
