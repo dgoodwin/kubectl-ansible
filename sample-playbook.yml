@@ -1,0 +1,24 @@
+---
+- hosts: masters
+  run_once: true
+  tasks:
+
+  # Create a namespace using inline yaml.
+  - kubectl_apply:
+      kubeconfig:
+        # Use a kubeconfig file on the target host. Also support inline which
+        # could be used with ansible's file lookup to use a kubeconfig on the control host.
+        file: /etc/origin/master/admin.kubeconfig
+      namespace: default
+      #files:
+        #- configmap.yml
+      #binary: oc
+      inline:
+        kind: "Namespace"
+        apiVersion: v1
+        metadata:
+          name: testnamespace
+    register: ns_apply_reg
+
+  - debug: var=ns_apply_reg
+
