@@ -20,15 +20,11 @@
   - debug: var=ns_apply_reg
 
   # Use a kubeconfig and configmap definition from the local control host filesystem:
-  - set_fact:
-      local_kubeconfig: "{{ lookup('file', 'admin.kubeconfig') }}"
-      configmap: "{{ lookup('file', 'configmap.yml') }}"
-
   - kubectl_apply:
       kubeconfig:
-        inline: "{{ local_kubeconfig }}"
+        inline: "{{ lookup('file', 'admin.kubeconfig') }}"
       namespace: default
-      inline: "{{ configmap }}"
+      inline: "{{ lookup('file', 'configmap.yml') }}"
     register: ns_apply_reg
 
   - debug: var=ns_apply_reg
