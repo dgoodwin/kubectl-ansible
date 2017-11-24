@@ -27,6 +27,14 @@ class ActionModule(ActionBase):
         files = task_vars.get('files', [])
         for filename in files:
             action_mod_debug.append('got filename: %s' % filename['src'])
+            # TODO: secure copy
+            copy_args = dict(
+                src=filedef['src'],
+                dest='/tmp/test1.yaml',
+            )
+            copy_results = self._execute_module(module_name=copy, module_args=copy_args,
+                tmp=tmp, task_vars=task_vars)
+            results['copy'] = copy_results
 
         # source = task_vars.get('src', None)
         # if source is None:
@@ -35,6 +43,7 @@ class ActionModule(ActionBase):
 
         if 'failed' in results:
             return results
+
 
         # Execute the kubectl module itself on remote host:
         results = merge_hash(results, self._execute_module(tmp=tmp, task_vars=task_vars))
