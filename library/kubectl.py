@@ -22,40 +22,63 @@ class KubectlRunner(object):
                                 stderr=subprocess.PIPE,
                                 env=curr_env)
 
+        encoded_input = input_data.encode() if input_data else None
         # TODO: encode here was required on Python 3, watchout for 2:
-        stdout, stderr = proc.communicate(input_data.encode())
+        stdout, stderr = proc.communicate(encoded_input)
         return proc.returncode, stdout.decode('utf-8'), stderr.decode('utf-8')
 
 
 class KubectlApplier(object):
-    def __init__(self, kubeconfig=None, namespace=None, inline=None, debug=None):
+    def __init__(self, kubeconfig=None, namespace=None, inline=None, files=None, debug=None):
         self.kubeconfig = kubeconfig
         self.namespace = namespace
         self.inline = inline
 
         # Loads as a dict, convert to a json string for piping to kubectl:
         #self.inline = json.dumps(inline)
+        self.files = files
+        if self.files is None:
+            self.files = []
 
-        self.cmds = ["kubectl", "apply", "-f", "-"]
+        self.cmds = ["kubectl", "apply"]
+
         if self.namespace:
             self.cmds.extend(["-n", self.namespace])
         self.cmd_runner = KubectlRunner(self.kubeconfig)
 
         self.changed = False
+        self.failed = False
         self.debug_lines = []
         self.stdout_lines = []
         self.stderr_lines = []
 
     def run(self):
-        self.debug_lines.append('Using inline input: %s' % self.inline)
-        exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, self.inline)
+        exit_code, stdout, stderr = (None, None, None)
+        if self.inline:
+            self.cmds.extend(["-f", "-"])
+            self.debug_lines.append('Using inline input: %s' % self.inline)
+            exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, self.inline)
+            self._process_cmd_result(exit_code, stdout, stderr)
+            if self.failed:
+                return
+
+        # TODO: validate file dict
+        for f in self.files:
+            self.debug_lines.append("Processing file: %s" % f['src'])
+            self.cmds.extend(['-f', f['src']])
+            # No stdin input requires when applying a file/dir:
+            exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, None)
+            self._process_cmd_result(exit_code, stdout, stderr)
+            if self.failed:
+                return
+
+    def _process_cmd_result(self, exit_code, stdout, stderr):
         if stdout != '':
             self.stdout_lines.extend(stdout.split('\n'))
         if stderr != '':
             self.stderr_lines.extend(stderr.split('\n'))
-        self.changed = exit_code == 0
-        # tODO: include changed here?
-        return exit_code, stdout, stderr
+        self.changed = self.changed or (exit_code == 0)
+        self.failed = self.failed or (exit_code > 0 and exit_code != 3)
 
 
 def main():
@@ -64,6 +87,7 @@ def main():
         namespace=dict(required=True, type='str'),
         debug=dict(required=False, choices=BOOLEANS, default='false'),
         inline=dict(required=False, type='str'),
+        files=dict(required=False, type='list'),
     ))
 
     # Validate module inputs:
@@ -88,27 +112,25 @@ def main():
             kubeconfig=kubeconfig_file,
             namespace=module.params['namespace'],
             inline=module.params['inline'],
+            files=module.params['files'],
             debug=module.boolean(module.params['debug']))
-    exit_code, stdout, stderr = applier.run()
+    applier.run()
 
     # Cleanup:
     # TODO: wrap the above in try?
     if temp_kubeconfig_path:
         os.remove(temp_kubeconfig_path)
 
-    # 3 is expected to imply no change
-    if exit_code > 0 and exit_code != 3:
+    if applier.failed:
         module.fail_json(
                 msg="error executing kubectl apply",
                 debug=applier.debug_lines,
-                exit_code=exit_code,
                 stderr_lines=applier.stderr_lines,
                 stdout_lines=applier.stdout_lines)
     else:
         module.exit_json(
                 changed=applier.changed,
                 debug=applier.debug_lines,
-                exit_code=exit_code,
                 stderr_lines=applier.stderr_lines,
                 stdout_lines=applier.stdout_lines)
 

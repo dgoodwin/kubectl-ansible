@@ -28,7 +28,7 @@
   - debug: msg="{{ kubeconfig_slurp['content'] | b64decode }}"
 
   # Use a kubeconfig and configmap definition from the local control host filesystem:
-  - name: Create configmap with local kubeconfig and configmap files
+  - name: Create configmap with inline file
     kubectl:
       kubeconfig:
         # Could also use a file lookup for any file on your control host:
@@ -38,5 +38,17 @@
     register: ns_apply_reg
 
   - debug: var=ns_apply_reg
+
+  # Transfer a file automatically, apply it, then clean it up:
+  - name: Create configmap with local kubeconfig and configmap files
+    kubectl:
+      kubeconfig:
+        inline: "{{ kubeconfig_slurp['content'] | b64decode }}"
+      namespace: testnamespace
+      files:
+        - src: configmap2.yml
+    register: config2_reg
+
+  - debug: var=config2_reg
 
 
