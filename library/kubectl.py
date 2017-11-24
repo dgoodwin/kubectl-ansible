@@ -37,6 +37,8 @@ class KubectlApplier(object):
         #self.inline = json.dumps(inline)
 
         self.cmds = ["kubectl", "apply", "-f", "-"]
+        if self.namespace:
+            self.cmds.extend(["-n", self.namespace])
         self.cmd_runner = KubectlRunner(self.kubeconfig)
 
         self.changed = False
@@ -51,6 +53,7 @@ class KubectlApplier(object):
             self.stdout_lines.extend(stdout.split('\n'))
         if stderr != '':
             self.stderr_lines.extend(stderr.split('\n'))
+        self.changed = exit_code == 0
         # tODO: include changed here?
         return exit_code, stdout, stderr
 
@@ -74,10 +77,11 @@ def main():
         # TODO: copy the kubeconfig for safety reasons.
         kubeconfig_file = kubeconfig['file']
     elif 'inline' in kubeconfig:
-        tmpfile, temp_kubeconfig_path = tempfile.mkstemp()
-        tmpfile = open(tmpfile, 'w')
-        tmpfile.write(kubeconfig['inline'])
-        tmpfile.close()
+        fd, temp_kubeconfig_path = tempfile.mkstemp()
+        #tmpfile = open(tmpfile, 'w')
+        with open(temp_kubeconfig_path, 'w') as f:
+            f.write(kubeconfig['inline'])
+        os.close(fd)
         kubeconfig_file = temp_kubeconfig_path
 
     applier = KubectlApplier(
@@ -92,12 +96,21 @@ def main():
     if temp_kubeconfig_path:
         os.remove(temp_kubeconfig_path)
 
-    module.exit_json(
-            changed=applier.changed,
-            debug=applier.debug_lines,
-            exit_code=exit_code,
-            stderr_lines=applier.stderr_lines,
-            stdout_lines=applier.stdout_lines)
+    # 3 is expected to imply no change
+    if exit_code > 0 and exit_code != 3:
+        module.fail_json(
+                msg="error executing kubectl apply",
+                debug=applier.debug_lines,
+                exit_code=exit_code,
+                stderr_lines=applier.stderr_lines,
+                stdout_lines=applier.stdout_lines)
+    else:
+        module.exit_json(
+                changed=applier.changed,
+                debug=applier.debug_lines,
+                exit_code=exit_code,
+                stderr_lines=applier.stderr_lines,
+                stdout_lines=applier.stdout_lines)
 
 
 if __name__ == '__main__':

@@ -1,10 +1,12 @@
+# TODO: This playbook should work on any Origin master, and clean up after itself.
+# (by using and deleting a temporary namespace)
 ---
 - hosts: masters
   run_once: true
   tasks:
 
-  # Create a namespace using inline yaml:
-  - kubectl_apply:
+  - name: Create a namespace from inline yaml with remote kubeconfig file
+    kubectl:
       kubeconfig:
         # Kubeconfig file on the remote host:
         file: /etc/origin/master/admin.kubeconfig
@@ -19,11 +21,19 @@
 
   - debug: var=ns_apply_reg
 
+  - slurp:
+      src: /etc/origin/master/admin.kubeconfig
+    register: kubeconfig_slurp
+
+  - debug: msg="{{ kubeconfig_slurp['content'] | b64decode }}"
+
   # Use a kubeconfig and configmap definition from the local control host filesystem:
-  - kubectl_apply:
+  - name: Create configmap with local kubeconfig and configmap files
+    kubectl:
       kubeconfig:
-        inline: "{{ lookup('file', 'admin.kubeconfig') }}"
-      namespace: default
+        # Could also use a file lookup for any file on your control host:
+        inline: "{{ kubeconfig_slurp['content'] | b64decode }}"
+      namespace: testnamespace
       inline: "{{ lookup('file', 'configmap.yml') }}"
     register: ns_apply_reg
 
