@@ -7,7 +7,7 @@
   gather_facts: false
   connection: local
   roles:
-    - kubectl_apply
+    - kubectl-ansible
   vars:
     # TODO: make ~/.kube/config the default used per k8s_raw
     kubeconfig_file: /home/dgoodwin/.kube/config
@@ -19,7 +19,6 @@
       kubeconfig:
         # Kubeconfig file on the remote host:
         file: "{{ kubeconfig_file }}"
-      # You can specify your kubernetes config inline if desired. The | is important here:
       definition:
         kind: "Namespace"
         apiVersion: v1
