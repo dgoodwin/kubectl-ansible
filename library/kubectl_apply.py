@@ -1,5 +1,6 @@
 import os
 import json
+import shutil
 import subprocess
 import tempfile
 import yaml
@@ -52,6 +53,7 @@ class KubectlApplier(object):
 
     def run(self):
         exit_code, stdout, stderr = (None, None, None)
+        self.debug_lines.append("using kubeconfig: %s" % self.kubeconfig)
         if self.definition:
             self.cmds.extend(["-f", "-"])
             # We end up with a string here containing json, but using single quotes instead of double,
@@ -114,27 +116,34 @@ def main():
     # Validate module inputs:
 
     # TODO: support K8S_AUTH_KUBECONFIG per k8s_raw
-    kubeconfig_file = os.path.expanduser("~/.kube/config")
-    temp_kubeconfig_path = None
-    kubeconfig = module.params['kubeconfig']
-    if kubeconfig:
-        if 'file' in kubeconfig and 'inline' in kubeconfig:
-            pass # TODO: error here
-        if 'file' in kubeconfig:
-            # TODO: copy the kubeconfig for safety reasons.
-            kubeconfig_file = kubeconfig['file']
-        elif 'inline' in kubeconfig:
-            fd, temp_kubeconfig_path = tempfile.mkstemp()
-            with open(temp_kubeconfig_path, 'w') as f:
-                f.write(kubeconfig['inline'])
-            os.close(fd)
-            kubeconfig_file = temp_kubeconfig_path
 
-    if not os.path.exists(kubeconfig_file):
-        module.fail_json(msg="kubeconfig file does not exist: %s" % kubeconfig_file)
+    # Temporary copy of kubeconfig specified, we will always clean this up after execution:
+    temp_kubeconfig_path = None
+
+    kubeconfig = module.params['kubeconfig']
+
+    if 'file' in kubeconfig and 'inline' in kubeconfig:
+        module.fail_json(msg="cannot specify both 'file' and 'inline' for kubeconfig")
+
+    # If no kubeconfig was provided, use the default location:
+    if 'file' not in kubeconfig:
+        kubeconfig['file'] = os.path.expanduser("~/.kube/config")
+
+    if 'inline' in kubeconfig:
+        fd, temp_kubeconfig_path = tempfile.mkstemp(prefix="ansible-tmp-kubeconfig-")
+        with open(temp_kubeconfig_path, 'w') as f:
+            f.write(kubeconfig['inline'])
+        os.close(fd)
+
+    else:
+        # copy the kubeconfig so we can safely switch contexts:
+        if not os.path.exists(kubeconfig['file']):
+            module.fail_json(msg="kubeconfig file does not exist: %s" % kubeconfig['file'])
+        fd, temp_kubeconfig_path = tempfile.mkstemp(prefix="ansible-tmp-kubeconfig-")
+        shutil.copy2(kubeconfig['file'], temp_kubeconfig_path)
 
     applier = KubectlApplier(
-        kubeconfig=kubeconfig_file,
+        kubeconfig=temp_kubeconfig_path,
         namespace=module.params['namespace'],
         definition=module.params['definition'],
         src=module.params['src'],
@@ -144,8 +153,7 @@ def main():
 
     # Cleanup:
     # TODO: wrap the above in try?
-    if temp_kubeconfig_path:
-        os.remove(temp_kubeconfig_path)
+    os.remove(temp_kubeconfig_path)
 
     if applier.failed:
         module.fail_json(
