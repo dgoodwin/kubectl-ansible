@@ -56,7 +56,12 @@ class KubectlApplier(object):
         exit_code, stdout, stderr = (None, None, None)
         if self.definition:
             self.cmds.extend(["-f", "-"])
+            # We end up with a string here containing json, but using single quotes instead of double,
+            # which does not parse as valid json. Replace them instead so kubectl is happy:
+            # TODO: is this right?
+            self.definition = self.definition.replace('\'', '"')
             self.debug_lines.append('Using definition input: %s' % self.definition)
+            self.debug_lines.append('Using definition type: %s' % type(self.definition))
             exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, self.definition)
             self._process_cmd_result(exit_code, stdout, stderr)
             if self.failed:
