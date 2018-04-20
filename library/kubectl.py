@@ -29,13 +29,13 @@ class KubectlRunner(object):
 
 
 class KubectlApplier(object):
-    def __init__(self, kubeconfig=None, namespace=None, inline=None, files=None, debug=None):
+    def __init__(self, kubeconfig=None, namespace=None, definition=None, files=None, debug=None):
         self.kubeconfig = kubeconfig
         self.namespace = namespace
-        self.inline = inline
+        self.definition = definition
 
         # Loads as a dict, convert to a json string for piping to kubectl:
-        #self.inline = json.dumps(inline)
+        #self.definition = json.dumps(definition)
         self.files = files
         if self.files is None:
             self.files = []
@@ -54,21 +54,10 @@ class KubectlApplier(object):
 
     def run(self):
         exit_code, stdout, stderr = (None, None, None)
-        if self.inline:
+        if self.definition:
             self.cmds.extend(["-f", "-"])
-            self.debug_lines.append('Using inline input: %s' % self.inline)
-            exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, self.inline)
-            self._process_cmd_result(exit_code, stdout, stderr)
-            if self.failed:
-                return
-
-        # TODO: validate file dict
-        for f in self.files:
-            self.debug_lines.append("Processing file: %s" % f['src'])
-            #self.cmds.extend(['-f', f['src']])
-            self.cmds.extend(['-f', '/tmp/test1.yaml'])
-            # No stdin input requires when applying a file/dir:
-            exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, None)
+            self.debug_lines.append('Using definition input: %s' % self.definition)
+            exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, self.definition)
             self._process_cmd_result(exit_code, stdout, stderr)
             if self.failed:
                 return
@@ -87,7 +76,7 @@ def main():
         kubeconfig=dict(required=True, type='dict'),
         namespace=dict(required=True, type='str'),
         debug=dict(required=False, type='bool', default='false'),
-        inline=dict(required=False, type='str'),
+        definition=dict(required=False, type='str'),
         files=dict(required=False, type='list'),
     ))
 
@@ -110,11 +99,11 @@ def main():
         kubeconfig_file = temp_kubeconfig_path
 
     applier = KubectlApplier(
-            kubeconfig=kubeconfig_file,
-            namespace=module.params['namespace'],
-            inline=module.params['inline'],
-            files=module.params['files'],
-            debug=module.boolean(module.params['debug']))
+        kubeconfig=kubeconfig_file,
+        namespace=module.params['namespace'],
+        definition=module.params['definition'],
+        files=module.params['files'],
+        debug=module.boolean(module.params['debug']))
     applier.run()
 
     # Cleanup:
@@ -124,16 +113,16 @@ def main():
 
     if applier.failed:
         module.fail_json(
-                msg="error executing kubectl apply",
-                debug=applier.debug_lines,
-                stderr_lines=applier.stderr_lines,
-                stdout_lines=applier.stdout_lines)
+            msg="error executing kubectl apply",
+            debug=applier.debug_lines,
+            stderr_lines=applier.stderr_lines,
+            stdout_lines=applier.stdout_lines)
     else:
         module.exit_json(
-                changed=applier.changed,
-                debug=applier.debug_lines,
-                stderr_lines=applier.stderr_lines,
-                stdout_lines=applier.stdout_lines)
+            changed=applier.changed,
+            debug=applier.debug_lines,
+            stderr_lines=applier.stderr_lines,
+            stdout_lines=applier.stdout_lines)
 
 
 if __name__ == '__main__':
