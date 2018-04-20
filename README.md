@@ -6,6 +6,10 @@ kubectl_apply
 An Ansible role to load the kubectl_apply library module, which aims to make using
 the CLI functionality of kubectl apply extremely usable with Ansible.
 
+Install with:
+
+`ansible-galaxy install git+git@github.com:dgoodwin/kubectl-ansible.git,masteransible-galaxy install git+git@github.com:dgoodwin/kubectl-ansible.git,master`
+
 The recommended approach for declarative management of Kubernetes config is
 `kubectl apply`, which contains sophisticated logic for performing a three way
 merge between an an objects incoming config, last applied config, and current
