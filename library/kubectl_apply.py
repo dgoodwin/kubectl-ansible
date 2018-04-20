@@ -104,7 +104,7 @@ class KubectlApplier(object):
 
 def main():
     module = AnsibleModule(argument_spec=dict(
-        kubeconfig=dict(required=True, type='dict'),
+        kubeconfig=dict(required=False, type='dict'),
         namespace=dict(required=False, type='str'),
         debug=dict(required=False, type='bool', default='false'),
         definition=dict(required=False, type='str'),
@@ -113,20 +113,25 @@ def main():
 
     # Validate module inputs:
 
-    kubeconfig = module.params['kubeconfig']
-    kubeconfig_file = None
+    # TODO: support K8S_AUTH_KUBECONFIG per k8s_raw
+    kubeconfig_file = os.path.expanduser("~/.kube/config")
     temp_kubeconfig_path = None
-    if 'file' in kubeconfig and 'inline' in kubeconfig:
-        pass # TODO: error here
-    if 'file' in kubeconfig:
-        # TODO: copy the kubeconfig for safety reasons.
-        kubeconfig_file = kubeconfig['file']
-    elif 'inline' in kubeconfig:
-        fd, temp_kubeconfig_path = tempfile.mkstemp()
-        with open(temp_kubeconfig_path, 'w') as f:
-            f.write(kubeconfig['inline'])
-        os.close(fd)
-        kubeconfig_file = temp_kubeconfig_path
+    kubeconfig = module.params['kubeconfig']
+    if kubeconfig:
+        if 'file' in kubeconfig and 'inline' in kubeconfig:
+            pass # TODO: error here
+        if 'file' in kubeconfig:
+            # TODO: copy the kubeconfig for safety reasons.
+            kubeconfig_file = kubeconfig['file']
+        elif 'inline' in kubeconfig:
+            fd, temp_kubeconfig_path = tempfile.mkstemp()
+            with open(temp_kubeconfig_path, 'w') as f:
+                f.write(kubeconfig['inline'])
+            os.close(fd)
+            kubeconfig_file = temp_kubeconfig_path
+
+    if not os.path.exists(kubeconfig_file):
+        module.fail_json(msg="kubeconfig file does not exist: %s" % kubeconfig_file)
 
     applier = KubectlApplier(
         kubeconfig=kubeconfig_file,
@@ -134,6 +139,7 @@ def main():
         definition=module.params['definition'],
         src=module.params['src'],
         debug=module.boolean(module.params['debug']))
+
     applier.run()
 
     # Cleanup:

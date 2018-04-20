@@ -16,6 +16,7 @@
   # if you run it from CLI with a separate file.
   - name: Create a namespace from inline yaml with kubeconfig file path
     kubectl_apply:
+      # Optional, default will try to use ~/.kube/config
       kubeconfig:
         # Kubeconfig file on the remote host:
         file: "{{ kubeconfig_file }}"
@@ -43,6 +44,7 @@
   - name: Create configmap with inline kubeconfig and remote configmap file
     kubectl_apply:
       kubeconfig:
+        # TODO: sync up with k8s_raw authors here, is inline/local kubeconfig worth implementing?
         inline: "{{ lookup('file', kubeconfig_file) }}"
       namespace: testnamespace
       src: files/configmap2.yml
