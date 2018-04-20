@@ -1,16 +1,17 @@
 # TODO: This playbook should work on any Origin master, and clean up after itself.
 # (by using and deleting a temporary namespace)
 ---
-- hosts: masters
-  run_once: true
+- hosts: localhost
+  gather_facts: false
+  connection: local
   tasks:
 
-  - name: Create a namespace from inline yaml with remote kubeconfig file
+  - name: Create a namespace from inline yaml with kubeconfig on target host
     kubectl:
       kubeconfig:
         # Kubeconfig file on the remote host:
-        file: /etc/origin/master/admin.kubeconfig
-      namespace: default
+        file: /home/dgoodwin/.kube/config
+      namespace: testnamespace # TODO: required right now but redundant with definition
       # You can specify your kubernetes config inline if desired. The | is important here:
       inline: |
         kind: "Namespace"

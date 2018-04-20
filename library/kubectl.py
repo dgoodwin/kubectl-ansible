@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 import yaml
 
-from ansible.module_utils.basic import AnsibleModule, BOOLEANS
+from ansible.module_utils.basic import AnsibleModule
 
 class KubectlRunner(object):
 
@@ -65,7 +65,8 @@ class KubectlApplier(object):
         # TODO: validate file dict
         for f in self.files:
             self.debug_lines.append("Processing file: %s" % f['src'])
-            self.cmds.extend(['-f', f['src']])
+            #self.cmds.extend(['-f', f['src']])
+            self.cmds.extend(['-f', '/tmp/test1.yaml'])
             # No stdin input requires when applying a file/dir:
             exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, None)
             self._process_cmd_result(exit_code, stdout, stderr)
@@ -85,7 +86,7 @@ def main():
     module = AnsibleModule(argument_spec=dict(
         kubeconfig=dict(required=True, type='dict'),
         namespace=dict(required=True, type='str'),
-        debug=dict(required=False, choices=BOOLEANS, default='false'),
+        debug=dict(required=False, type='bool', default='false'),
         inline=dict(required=False, type='str'),
         files=dict(required=False, type='list'),
     ))
