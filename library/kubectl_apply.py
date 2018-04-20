@@ -105,7 +105,7 @@ class KubectlApplier(object):
 def main():
     module = AnsibleModule(argument_spec=dict(
         kubeconfig=dict(required=True, type='dict'),
-        namespace=dict(required=True, type='str'),
+        namespace=dict(required=False, type='str'),
         debug=dict(required=False, type='bool', default='false'),
         definition=dict(required=False, type='str'),
         src=dict(required=False, type='str'),
