@@ -3,34 +3,28 @@
 The recommended approach for declarative management of Kubernetes config is
 `kubectl apply`, which contains sophisticated logic for performing a three way
 merge between an an objects incoming config, last applied config, and current
-state.  This logic however is implemented client side, and thus not available
-to callers of the API (including the current kubernetes module), and non-Go
-languages. In the future this logic may move to the API, however this is not
-expected near term.
+state.  This logic however is currently implemented client side, and thus not
+available to callers of the API and non-Go languages. An effort is underway (as
+of April 2018) to move this logic to the Kubernetes API server itself.
 
-However kubectl is intended to be treated as a type of API, as such in the
-interim we can leverage it's logic by wrapping in Ansible modules.
-
-This prototype is specific to generically managing actual Kubernetes config, it
-does not wrap Kubernetes yaml in Ansible yaml, or expose individual modules per
-individual Kubernetes type.
-
-This prototype aims to make applying Kubernetes config via Ansible easy, and
-consistent with the expected experience for config management in kubernetes.
-(including on the fly templating, simple yaml edits, file based and inline
-config, and patching) For more information see:
+For more information see:
 
   * [Declarative Application Management In Kubernetes](https://docs.google.com/document/d/1cLPGweVEYrVqQvBLJg6sxV-TrE5Rm2MNOBA_cxZP2WU/edit?usp=sharing)
 
-`kubectl delete` is represented by state: absent on the kubectl module itself.
+Ansible 2.5 recently released with preview modules [k8s_raw](https://docs.ansible.com/ansible/devel/modules/k8s_raw_module.html#k8s-raw-module) and [openshift_raw](https://docs.ansible.com/ansible/devel/modules/openshift_raw_module.html#openshift-raw-module). These modules however currently use a Python client library which relies on a fixed Python class existing for every API type you interact with. As such, they do not support custom resource definitions or apiextensions. An effort is underway to build a dynamic Python client which will then be integrated with these modules.
 
-`kubectl get` is represented by a kubectl_facts module.
+In the meantime, kubectl apply is the best tool we have available for
+declarative on-going Kubernetes config management. This module is intended to
+be a temporary solution while we wait, exposing the functionality kubectl
+offers and making it easy to use within Ansible.  It's interface is as
+consistent as possible with k8s_raw, and when the above work completes this
+module can likely be abandoned.
 
-## Assumptions
+# Original Target Ansible
 
-  * kubectl apply will be modified to accurately [report if changes had to be applied](https://github.com/kubernetes/kubernetes/pull/52647).
-
-# Target Ansible
+This was the original goal prior to the existence of k8s_raw.  Since then I've
+learned a few tricks and conventions that make some of what's below obsolete.
+For what this module currently actually supports see the sample playbook.
 
 ```yaml
 - kubectl:
@@ -49,8 +43,8 @@ config, and patching) For more information see:
     # cluster level objects.
     namespace: default
 
-    # You can specify your kubernetes config inline if desired. The | is important here:
-    inline: |
+    # You can specify your kubernetes config inline if desired.
+    definition:
       kind: "Namespace"
       apiVersion: v1
       metadata:
@@ -109,7 +103,7 @@ config, and patching) For more information see:
     files:
     - src: subdir/
     - src: configmap.json
-    inline: |
+    definition:
       kind: "Namespace"
       apiVersion: v1
       metadata:
