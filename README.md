@@ -8,7 +8,7 @@ the CLI functionality of kubectl apply extremely usable with Ansible.
 
 Install with:
 
-`ansible-galaxy install git+git@github.com:dgoodwin/kubectl-ansible.git,masteransible-galaxy install git+git@github.com:dgoodwin/kubectl-ansible.git,master`
+`ansible-galaxy install git+git@github.com:dgoodwin/kubectl-ansible.git,master`
 
 The recommended approach for declarative management of Kubernetes config is
 `kubectl apply`, which contains sophisticated logic for performing a three way
