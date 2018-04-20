@@ -18,16 +18,6 @@ class KubectlRunner(object):
         ''' Actually executes the command. This makes mocking easier. '''
         curr_env = os.environ.copy()
         curr_env.update({'KUBECONFIG': self.kubeconfig})
-        if self.context:
-            # If a specific context was requested, switch to it. We're operating on a temporary
-            # copy of the kubeconfig so there is no need to switch back after.
-            context_proc = subprocess.Popen(
-                    ["kubectl", "config", "use-context", self.context],
-                    env=curr_env)
-            context_proc.wait()
-            if context_proc.returncode > 0:
-                return context_proc.returncode, context_proc.stdout, context_proc.stderr
-
         proc = subprocess.Popen(cmds,
                                 stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE,
@@ -64,16 +54,24 @@ class KubectlApplier(object):
         self.stderr_lines = []
 
     def run(self):
-        exit_code, stdout, stderr = (None, None, None)
         self.debug_lines.append("using kubeconfig: %s" % self.kubeconfig)
+        exit_code, stdout, stderr = (None, None, None)
+
+        # Switch context if necessary:
+        if self.context:
+            exit_code, stdout, stderr = self.cmd_runner.run(
+                    ["kubectl", "config", "use-context", self.context], None)
+            self._process_cmd_result(exit_code, stdout, stderr)
+            if self.failed:
+                return
+
         if self.definition:
             self.cmds.extend(["-f", "-"])
             # We end up with a string here containing json, but using single quotes instead of double,
             # which does not parse as valid json. Replace them instead so kubectl is happy:
             # TODO: is this right?
             self.definition = self.definition.replace('\'', '"')
-            self.debug_lines.append('Using definition input: %s' % self.definition)
-            self.debug_lines.append('Using definition type: %s' % type(self.definition))
+            self.debug_lines.append('definition: %s' % self.definition)
             exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, self.definition)
             self._process_cmd_result(exit_code, stdout, stderr)
             if self.failed:
@@ -86,6 +84,8 @@ class KubectlApplier(object):
                 # self.fail_json(msg="Error accessing {0}. Does the file exist?".format(path))
             exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, None)
             self._process_cmd_result(exit_code, stdout, stderr)
+            if self.failed:
+                return
 
     def _process_cmd_result(self, exit_code, stdout, stderr):
         if stdout:
@@ -93,10 +93,7 @@ class KubectlApplier(object):
         if stderr:
             self.stderr_lines.extend(stderr.split('\n'))
         self.changed = self.changed or self._check_stdout_for_changes(self.stdout_lines)
-        # This check for exit code 3 was from a kubernetes PR where this indicated
-        # no changes needed to be applied. PR however did not merge and was clused
-        # when the server-side apply effort began.
-        self.failed = self.failed or (exit_code > 0 and exit_code != 3)
+        self.failed = self.failed or exit_code > 0
 
     def _check_stdout_for_changes(self, stdout_lines):
         """
@@ -116,71 +113,75 @@ class KubectlApplier(object):
         return False
 
 
+class KubectlApplyWrapperModule(AnsibleModule):
+    def __init__(self, *args, **kwargs):
+        AnsibleModule.__init__(self, argument_spec=dict(
+            kubeconfig=dict(required=False, type='dict'),
+            context=dict(required=False, type='str'),
+            namespace=dict(required=False, type='str'),
+            debug=dict(required=False, type='bool', default='false'),
+            definition=dict(required=False, type='str'),
+            src=dict(required=False, type='str'),
+        ))
+
+    def execute_module(self):
+        # Temporary copy of kubeconfig specified, we will always clean this up after execution:
+        # TODO: support K8S_AUTH_KUBECONFIG per k8s_raw
+
+        temp_kubeconfig_path = None
+
+        kubeconfig = self.params['kubeconfig']
+
+        if 'file' in kubeconfig and 'inline' in kubeconfig:
+            self.fail_json(msg="cannot specify both 'file' and 'inline' for kubeconfig")
+
+        # If no kubeconfig was provided, use the default location:
+        if 'file' not in kubeconfig:
+            kubeconfig['file'] = os.path.expanduser("~/.kube/config")
+
+        if 'inline' in kubeconfig:
+            fd, temp_kubeconfig_path = tempfile.mkstemp(prefix="ansible-tmp-kubeconfig-")
+            with open(temp_kubeconfig_path, 'w') as f:
+                f.write(kubeconfig['inline'])
+            os.close(fd)
+
+        else:
+            # copy the kubeconfig so we can safely switch contexts:
+            if not os.path.exists(kubeconfig['file']):
+                self.fail_json(msg="kubeconfig file does not exist: %s" % kubeconfig['file'])
+            fd, temp_kubeconfig_path = tempfile.mkstemp(prefix="ansible-tmp-kubeconfig-")
+            shutil.copy2(kubeconfig['file'], temp_kubeconfig_path)
+
+        applier = KubectlApplier(
+            kubeconfig=temp_kubeconfig_path,
+            context=self.params['context'],
+            namespace=self.params['namespace'],
+            definition=self.params['definition'],
+            src=self.params['src'],
+            debug=self.boolean(self.params['debug']))
+
+        applier.run()
+
+        # Cleanup:
+        # TODO: wrap the above in try?
+        os.remove(temp_kubeconfig_path)
+
+        if applier.failed:
+            self.fail_json(
+                msg="error executing kubectl apply",
+                debug=applier.debug_lines,
+                stderr_lines=applier.stderr_lines,
+                stdout_lines=applier.stdout_lines)
+        else:
+            self.exit_json(
+                changed=applier.changed,
+                debug=applier.debug_lines,
+                stderr_lines=applier.stderr_lines,
+                stdout_lines=applier.stdout_lines)
+
+
 def main():
-    module = AnsibleModule(argument_spec=dict(
-        kubeconfig=dict(required=False, type='dict'),
-        context=dict(required=False, type='str'),
-        namespace=dict(required=False, type='str'),
-        debug=dict(required=False, type='bool', default='false'),
-        definition=dict(required=False, type='str'),
-        src=dict(required=False, type='str'),
-    ))
-
-    # Validate module inputs:
-
-    # TODO: support K8S_AUTH_KUBECONFIG per k8s_raw
-
-    # Temporary copy of kubeconfig specified, we will always clean this up after execution:
-    temp_kubeconfig_path = None
-
-    kubeconfig = module.params['kubeconfig']
-
-    if 'file' in kubeconfig and 'inline' in kubeconfig:
-        module.fail_json(msg="cannot specify both 'file' and 'inline' for kubeconfig")
-
-    # If no kubeconfig was provided, use the default location:
-    if 'file' not in kubeconfig:
-        kubeconfig['file'] = os.path.expanduser("~/.kube/config")
-
-    if 'inline' in kubeconfig:
-        fd, temp_kubeconfig_path = tempfile.mkstemp(prefix="ansible-tmp-kubeconfig-")
-        with open(temp_kubeconfig_path, 'w') as f:
-            f.write(kubeconfig['inline'])
-        os.close(fd)
-
-    else:
-        # copy the kubeconfig so we can safely switch contexts:
-        if not os.path.exists(kubeconfig['file']):
-            module.fail_json(msg="kubeconfig file does not exist: %s" % kubeconfig['file'])
-        fd, temp_kubeconfig_path = tempfile.mkstemp(prefix="ansible-tmp-kubeconfig-")
-        shutil.copy2(kubeconfig['file'], temp_kubeconfig_path)
-
-    applier = KubectlApplier(
-        kubeconfig=temp_kubeconfig_path,
-        context=module.params['context'],
-        namespace=module.params['namespace'],
-        definition=module.params['definition'],
-        src=module.params['src'],
-        debug=module.boolean(module.params['debug']))
-
-    applier.run()
-
-    # Cleanup:
-    # TODO: wrap the above in try?
-    os.remove(temp_kubeconfig_path)
-
-    if applier.failed:
-        module.fail_json(
-            msg="error executing kubectl apply",
-            debug=applier.debug_lines,
-            stderr_lines=applier.stderr_lines,
-            stdout_lines=applier.stdout_lines)
-    else:
-        module.exit_json(
-            changed=applier.changed,
-            debug=applier.debug_lines,
-            stderr_lines=applier.stderr_lines,
-            stdout_lines=applier.stdout_lines)
+    KubectlApplyWrapperModule().execute_module()
 
 
 if __name__ == '__main__':
