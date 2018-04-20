@@ -20,6 +20,7 @@
       kubeconfig:
         # Kubeconfig file on the remote host:
         file: "{{ kubeconfig_file }}"
+      context: cluster-operator/127-0-0-1:8443/system:admin2
       definition:
         kind: "Namespace"
         apiVersion: v1

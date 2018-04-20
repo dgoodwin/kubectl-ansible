@@ -9,14 +9,25 @@ from ansible.module_utils.basic import AnsibleModule
 
 class KubectlRunner(object):
 
-    def __init__(self, kubeconfig):
+    def __init__(self, kubeconfig, context=None):
         self.kubeconfig = kubeconfig
+        self.context = context
 
     # following approach from lib_openshift
     def run(self, cmds, input_data):
         ''' Actually executes the command. This makes mocking easier. '''
         curr_env = os.environ.copy()
         curr_env.update({'KUBECONFIG': self.kubeconfig})
+        if self.context:
+            # If a specific context was requested, switch to it. We're operating on a temporary
+            # copy of the kubeconfig so there is no need to switch back after.
+            context_proc = subprocess.Popen(
+                    ["kubectl", "config", "use-context", self.context],
+                    env=curr_env)
+            context_proc.wait()
+            if context_proc.returncode > 0:
+                return context_proc.returncode, context_proc.stdout, context_proc.stderr
+
         proc = subprocess.Popen(cmds,
                                 stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE,
@@ -30,8 +41,9 @@ class KubectlRunner(object):
 
 
 class KubectlApplier(object):
-    def __init__(self, kubeconfig=None, namespace=None, definition=None, src=None, debug=None):
+    def __init__(self, kubeconfig=None, context=None, namespace=None, definition=None, src=None, debug=None):
         self.kubeconfig = kubeconfig
+        self.context = context
         self.namespace = namespace
         self.definition = definition
 
@@ -43,7 +55,7 @@ class KubectlApplier(object):
 
         if self.namespace:
             self.cmds.extend(["-n", self.namespace])
-        self.cmd_runner = KubectlRunner(self.kubeconfig)
+        self.cmd_runner = KubectlRunner(self.kubeconfig, self.context)
 
         self.changed = False
         self.failed = False
@@ -76,9 +88,9 @@ class KubectlApplier(object):
             self._process_cmd_result(exit_code, stdout, stderr)
 
     def _process_cmd_result(self, exit_code, stdout, stderr):
-        if stdout != '':
+        if stdout:
             self.stdout_lines.extend(stdout.split('\n'))
-        if stderr != '':
+        if stderr:
             self.stderr_lines.extend(stderr.split('\n'))
         self.changed = self.changed or self._check_stdout_for_changes(self.stdout_lines)
         # This check for exit code 3 was from a kubernetes PR where this indicated
@@ -107,6 +119,7 @@ class KubectlApplier(object):
 def main():
     module = AnsibleModule(argument_spec=dict(
         kubeconfig=dict(required=False, type='dict'),
+        context=dict(required=False, type='str'),
         namespace=dict(required=False, type='str'),
         debug=dict(required=False, type='bool', default='false'),
         definition=dict(required=False, type='str'),
@@ -144,6 +157,7 @@ def main():
 
     applier = KubectlApplier(
         kubeconfig=temp_kubeconfig_path,
+        context=module.params['context'],
         namespace=module.params['namespace'],
         definition=module.params['definition'],
         src=module.params['src'],
