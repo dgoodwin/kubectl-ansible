@@ -97,7 +97,6 @@ def main():
         kubeconfig_file = kubeconfig['file']
     elif 'inline' in kubeconfig:
         fd, temp_kubeconfig_path = tempfile.mkstemp()
-        #tmpfile = open(tmpfile, 'w')
         with open(temp_kubeconfig_path, 'w') as f:
             f.write(kubeconfig['inline'])
         os.close(fd)

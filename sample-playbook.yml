@@ -26,19 +26,13 @@
 
   - debug: var=ns_apply_reg
 
-  - slurp:
-      src: "{{ kubeconfig_file }}"
-    register: kubeconfig_slurp
-
-  - debug: msg="{{ kubeconfig_slurp['content'] | b64decode }}"
-
   # Use a kubeconfig and configmap definition from the local control host filesystem:
   - name: Create configmap with inline kubeconfig and configmap file on Ansible controller filesystem
     kubectl:
       kubeconfig:
         # Could also use a file lookup for any file on your control host:
         # TODO: sync up with k8s_raw authors here, is inline/local kubeconfig worth implementing?
-        inline: "{{ kubeconfig_slurp['content'] | b64decode }}"
+        inline: "{{ lookup('file', kubeconfig_file) }}"
       namespace: testnamespace
       definition: "{{ lookup('file', 'configmap.yml') | from_yaml }}"
     register: ns_apply_reg
@@ -48,7 +42,7 @@
   - name: Create configmap with inline kubeconfig and remote configmap file
     kubectl:
       kubeconfig:
-        inline: "{{ kubeconfig_slurp['content'] | b64decode }}"
+        inline: "{{ lookup('file', kubeconfig_file) }}"
       namespace: testnamespace
       # TODO: src
       definition: "{{ lookup('file', 'files/configmap2.yml') | from_yaml }}"
