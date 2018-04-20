@@ -29,16 +29,14 @@ class KubectlRunner(object):
 
 
 class KubectlApplier(object):
-    def __init__(self, kubeconfig=None, namespace=None, definition=None, files=None, debug=None):
+    def __init__(self, kubeconfig=None, namespace=None, definition=None, src=None, debug=None):
         self.kubeconfig = kubeconfig
         self.namespace = namespace
         self.definition = definition
 
         # Loads as a dict, convert to a json string for piping to kubectl:
         #self.definition = json.dumps(definition)
-        self.files = files
-        if self.files is None:
-            self.files = []
+        self.src = src
 
         self.cmds = ["kubectl", "apply"]
 
@@ -66,6 +64,14 @@ class KubectlApplier(object):
             self._process_cmd_result(exit_code, stdout, stderr)
             if self.failed:
                 return
+        elif self.src:
+            self.debug_lines.append('src: %s' % self.src)
+            self.cmds.extend(["-f", self.src])
+            # path = os.path.normpath(src)
+            # if not os.path.exists(path):
+                # self.fail_json(msg="Error accessing {0}. Does the file exist?".format(path))
+            exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, None)
+            self._process_cmd_result(exit_code, stdout, stderr)
 
     def _process_cmd_result(self, exit_code, stdout, stderr):
         if stdout != '':
@@ -73,6 +79,9 @@ class KubectlApplier(object):
         if stderr != '':
             self.stderr_lines.extend(stderr.split('\n'))
         self.changed = self.changed or (exit_code == 0)
+        # This check for exit code 3 was from a kubernetes PR where this indicated
+        # no changes needed to be applied. PR however did not merge and was clused
+        # when the server-side apply effort began.
         self.failed = self.failed or (exit_code > 0 and exit_code != 3)
 
 
@@ -82,7 +91,7 @@ def main():
         namespace=dict(required=True, type='str'),
         debug=dict(required=False, type='bool', default='false'),
         definition=dict(required=False, type='str'),
-        files=dict(required=False, type='list'),
+        src=dict(required=False, type='str'),
     ))
 
     # Validate module inputs:
@@ -106,7 +115,7 @@ def main():
         kubeconfig=kubeconfig_file,
         namespace=module.params['namespace'],
         definition=module.params['definition'],
-        files=module.params['files'],
+        src=module.params['src'],
         debug=module.boolean(module.params['debug']))
     applier.run()
 

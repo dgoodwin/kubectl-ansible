@@ -44,8 +44,7 @@
       kubeconfig:
         inline: "{{ lookup('file', kubeconfig_file) }}"
       namespace: testnamespace
-      # TODO: src
-      definition: "{{ lookup('file', 'files/configmap2.yml') | from_yaml }}"
+      src: files/configmap2.yml
     register: config2_reg
 
   #- debug: var=config2_reg
