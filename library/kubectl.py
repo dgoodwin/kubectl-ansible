@@ -78,11 +78,28 @@ class KubectlApplier(object):
             self.stdout_lines.extend(stdout.split('\n'))
         if stderr != '':
             self.stderr_lines.extend(stderr.split('\n'))
-        self.changed = self.changed or (exit_code == 0)
+        self.changed = self.changed or self._check_stdout_for_changes(self.stdout_lines)
         # This check for exit code 3 was from a kubernetes PR where this indicated
         # no changes needed to be applied. PR however did not merge and was clused
         # when the server-side apply effort began.
         self.failed = self.failed or (exit_code > 0 and exit_code != 3)
+
+    def _check_stdout_for_changes(self, stdout_lines):
+        """
+        kubectl apply will print lines such as:
+
+          namespace "testnamespace" created
+          namespace "testnamespace" configured
+          namespace "testnamespace" changed
+
+        To hack around the inability to know if something changed we'll parse stdout lines
+        looking for anytihng ending with either "created" or "configured". This should work for
+        commands that create/update multiple objects.
+        """
+        for line in stdout_lines:
+            if line.endswith(" created") or line.endswith(" configured"):
+                return True
+        return False
 
 
 def main():
