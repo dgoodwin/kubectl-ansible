@@ -37,11 +37,9 @@ class KubectlApplier(object):
         self.kubeconfig = kubeconfig
         self.context = context
         self.namespace = namespace
-        self.template_definition = template_definition
         self.parameters = parameters
 
         # Loads as a dict, convert to a json string for piping to kubectl:
-        #self.template_definition = json.dumps(template_definition)
         self.template_file = template_file
 
         self.cmds = ["oc", "process"]
@@ -73,27 +71,15 @@ class KubectlApplier(object):
             for k in self.parameters:
                 self.cmds.extend(["-p", "%s=%s" % (k, self.parameters[k])])
 
-        if self.template_definition:
-            self.cmds.extend(["-f", "-"])
-            # We end up with a string here containing json, but using single quotes instead of double,
-            # which does not parse as valid json. Replace them instead so kubectl is happy:
-            # TODO: is this right?
-            self.template_definition = self.template_definition.replace('\'', '"')
-            self.debug_lines.append('template_definition: %s' % self.template_definition)
-            exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, self.template_definition)
-            self._process_cmd_result(exit_code, stdout, stderr)
-            if self.failed:
-                return
-        elif self.template_file:
-            self.debug_lines.append('template_file: %s' % self.template_file)
-            self.cmds.extend(["-f", self.template_file])
-            # path = os.path.normpath(template_file)
-            # if not os.path.exists(path):
-                # self.fail_json(msg="Error accessing {0}. Does the file exist?".format(path))
-            exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, None)
-            self._process_cmd_result(exit_code, stdout, stderr)
-            if self.failed:
-                return
+        self.debug_lines.append('template_file: %s' % self.template_file)
+        self.cmds.extend(["-f", self.template_file])
+        # path = os.path.normpath(template_file)
+        # if not os.path.exists(path):
+            # self.fail_json(msg="Error accessing {0}. Does the file exist?".format(path))
+        exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, None)
+        self._process_cmd_result(exit_code, stdout, stderr)
+        if self.failed:
+            return
 
     def _process_cmd_result(self, exit_code, stdout, stderr):
         self.stdout = stdout
@@ -135,7 +121,8 @@ class OcProcessModule(AnsibleModule):
             parameters=dict(required=False, type='dict'),
         ))
 
-    def execute_module(self):
+    def _configure_kubeconfig(self):
+        """ Check kubeconfig parameters and copy to temporary file. Returns path to that file. """
         # Temporary copy of kubeconfig specified, we will always clean this up after execution:
         temp_kubeconfig_path = None
 
@@ -161,11 +148,41 @@ class OcProcessModule(AnsibleModule):
             fd, temp_kubeconfig_path = tempfile.mkstemp(prefix="ansible-tmp-kubeconfig-")
             shutil.copy2(kubeconfig['file'], temp_kubeconfig_path)
 
+        # TODO: probably could switch contexts here
+
+        return temp_kubeconfig_path
+
+
+    def execute_module(self):
+
+        # List of temp files we will cleanup:
+        temp_files = []
+
+        temp_kubeconfig_path = self._configure_kubeconfig()
+        temp_files.append(temp_kubeconfig_path)
+
+        # oc process doesn't seem to accept templates on stdin, so if the user if passing
+        # an inline template_definition we need to write it to a temp file to process:
+        if self.params['template_definition']:
+            # We end up with a string here containing json, but using single quotes instead of double,
+            # which does not parse as valid json. Replace them instead so kubectl is happy:
+            # TODO: is this right?
+            # TODO: ok it's definitely not right
+            template_definition = self.params['template_definition'].replace('\'', '"')
+            template_definition = template_definition.replace('True', 'true')
+            template_definition = template_definition.replace('False', 'false')
+
+            fd, temp_template_path = tempfile.mkstemp(prefix="ansible-tmp-template-")
+            with open(temp_template_path, 'w') as f:
+                f.write(template_definition)
+            os.close(fd)
+            #temp_files.append(temp_template_path)
+            self.params['template_file'] = temp_template_path
+
         applier = KubectlApplier(
             kubeconfig=temp_kubeconfig_path,
             context=self.params['context'],
             namespace=self.params['namespace'],
-            template_definition=self.params['template_definition'],
             template_file=self.params['template_file'],
             parameters=self.params['parameters'],
             debug=self.boolean(self.params['debug']))
@@ -173,7 +190,8 @@ class OcProcessModule(AnsibleModule):
         applier.run()
 
         # Cleanup:
-        os.remove(temp_kubeconfig_path)
+        for cleanup_file in temp_files:
+            os.remove(cleanup_file)
 
         # Attempt to parse the json output:
         result = ""
