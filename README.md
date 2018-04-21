@@ -3,12 +3,20 @@ Role Name
 
 kubectl-ansible
 
-This role contains the kubectl_apply Ansible module to wrap the CLI `kubectl
-apply` functionality for easy use within Ansible.
+This role contains Ansible modules that wrap kubectl/oc client CLI functionality
+for ease of use within Ansible playbooks and roles.
 
 Install with:
 
 `ansible-galaxy install git+git@github.com:dgoodwin/kubectl-ansible.git,master`
+
+
+## Modules
+
+### kubectl_apply
+
+Exposes `kubectl apply` functionality to ansible. Will attempt to accurately
+report changes, and supports custom resources and apiextensions.
 
 The recommended approach for declarative management of Kubernetes config is
 `kubectl apply`, which contains sophisticated logic for performing a three way
@@ -30,11 +38,15 @@ offers and making it easy to use within Ansible.  It's interface is as
 consistent as possible with k8s_raw to help with eventually transitioning, and
 when the above work completes this module can likely be abandoned.
 
+### oc_process
+
+Exposes `oc process` functionality for processing OpenShift templates. Result can then be created/applied with kubectl_apply or k8s_raw.
+
 
 Requirements
 ------------
 
-kubectl binary installed.
+kubectl/oc binaries installed on the target system.
 
 Role Variables
 --------------
