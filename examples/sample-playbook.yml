@@ -52,6 +52,40 @@
 
   - debug: var=config2_reg
 
+  - name: Process a template file on the remote filesystem
+    oc_process:
+      kubeconfig:
+        file: "{{ kubeconfig_file }}"
+      template_file: files/template1.yml
+      parameters:
+        SECRET_NAME: template1secret
+        KEY: "{{ 'key1' | b64encode }}"
+        VALUE: "{{ 'value1' | b64encode }}"
+    register: template1_out
+
+  - debug: var=template1_out
+  - debug: var=template1_out.result
+
+  - name: Apply the template
+    kubectl_apply:
+      kubeconfig:
+        file: "{{ kubeconfig_file }}"
+      namespace: testnamespace
+      definition: "{{ template1_out.result | to_json }}"
+    register: template1_apply_result
+
+  - debug: var=template1_apply_result
+
+
+  #- name: Process a template file on the Ansible controller filesystem
+    #oc_process:
+      #kubeconfig:
+        #file: "{{ kubeconfig_file }}"
+      #template_definition: "{{ lookup('file', 'template1.yml') | from_yaml }}"
+    #register: template1_out
+
+  #- debug: var=template1_out
+
   #- name: Cleanup testnamespace
     #k8s_raw:
       #state: absent
