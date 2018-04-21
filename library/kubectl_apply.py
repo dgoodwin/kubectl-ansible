@@ -123,11 +123,10 @@ class KubectlApplyWrapperModule(AnsibleModule):
             definition=dict(required=False, type='str'),
             src=dict(required=False, type='str'),
         ))
+        # TODO: check for conflicting modules
 
     def execute_module(self):
         # Temporary copy of kubeconfig specified, we will always clean this up after execution:
-        # TODO: support K8S_AUTH_KUBECONFIG per k8s_raw
-
         temp_kubeconfig_path = None
 
         kubeconfig = self.params['kubeconfig']
@@ -163,7 +162,6 @@ class KubectlApplyWrapperModule(AnsibleModule):
         applier.run()
 
         # Cleanup:
-        # TODO: wrap the above in try?
         os.remove(temp_kubeconfig_path)
 
         if applier.failed:

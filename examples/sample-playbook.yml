@@ -9,7 +9,6 @@
   roles:
     - kubectl-ansible
   vars:
-    # TODO: make ~/.kube/config the default used per k8s_raw
     kubeconfig_file: /home/dgoodwin/.kube/config
   tasks:
   # TODO: for some reason kubectl apply thinks always considers this yaml def "changed", even

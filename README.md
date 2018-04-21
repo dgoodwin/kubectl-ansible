@@ -1,10 +1,10 @@
 Role Name
 =========
 
-kubectl_apply
+kubectl-ansible
 
-An Ansible role to load the kubectl_apply library module, which aims to make using
-the CLI functionality of kubectl apply easy with Ansible.
+This role contains the kubectl_apply Ansible module to wrap the CLI `kubectl
+apply` functionality for easy use within Ansible.
 
 Install with:
 
