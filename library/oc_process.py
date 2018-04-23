@@ -128,6 +128,7 @@ class OcProcessModule(AnsibleModule):
     def __init__(self, *args, **kwargs):
         # TODO: add support for template name, pre-existing on server
         # TODO: check for conflicting params
+        # TODO: support parameter files
         AnsibleModule.__init__(self, argument_spec=dict(
             kubeconfig=dict(required=False, type='dict'),
             context=dict(required=False, type='str'),
@@ -144,6 +145,8 @@ class OcProcessModule(AnsibleModule):
         temp_kubeconfig_path = None
 
         kubeconfig = self.params['kubeconfig']
+        if not kubeconfig:
+            kubeconfig = {}
 
         if 'file' in kubeconfig and 'inline' in kubeconfig:
             self.fail_json(msg="cannot specify both 'file' and 'inline' for kubeconfig")

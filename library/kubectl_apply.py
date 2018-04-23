@@ -130,6 +130,8 @@ class KubectlApplyWrapperModule(AnsibleModule):
         temp_kubeconfig_path = None
 
         kubeconfig = self.params['kubeconfig']
+        if not kubeconfig:
+            kubeconfig = {}
 
         if 'file' in kubeconfig and 'inline' in kubeconfig:
             self.fail_json(msg="cannot specify both 'file' and 'inline' for kubeconfig")
