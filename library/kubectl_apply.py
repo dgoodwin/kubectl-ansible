@@ -31,7 +31,8 @@ class KubectlRunner(object):
 
 
 class KubectlApplier(object):
-    def __init__(self, kubeconfig=None, context=None, namespace=None, definition=None, src=None, debug=None):
+    def __init__(self, command=None, kubeconfig=None, context=None, namespace=None, definition=None, src=None, debug=None):
+        self.command=command
         self.kubeconfig = kubeconfig
         self.context = context
         self.namespace = namespace
@@ -41,7 +42,7 @@ class KubectlApplier(object):
         #self.definition = json.dumps(definition)
         self.src = src
 
-        self.cmds = ["kubectl", "apply"]
+        self.cmds = [self.command, "apply"]
 
         if self.namespace:
             self.cmds.extend(["-n", self.namespace])
@@ -117,6 +118,7 @@ class KubectlApplyWrapperModule(AnsibleModule):
     def __init__(self, *args, **kwargs):
         AnsibleModule.__init__(self, argument_spec=dict(
             kubeconfig=dict(required=False, type='dict'),
+            command=dict(required=False, type='str', default='kubectl'),
             context=dict(required=False, type='str'),
             namespace=dict(required=False, type='str'),
             debug=dict(required=False, type='bool', default='false'),
@@ -154,6 +156,7 @@ class KubectlApplyWrapperModule(AnsibleModule):
             shutil.copy2(kubeconfig['file'], temp_kubeconfig_path)
 
         applier = KubectlApplier(
+            command=self.params['command'],
             kubeconfig=temp_kubeconfig_path,
             context=self.params['context'],
             namespace=self.params['namespace'],
