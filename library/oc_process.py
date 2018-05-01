@@ -33,12 +33,13 @@ class KubectlRunner(object):
 
 
 class KubectlApplier(object):
-    def __init__(self, kubeconfig=None, context=None, namespace=None, template_definition=None, template_file=None, parameters=None, debug=None):
+    def __init__(self, kubeconfig=None, context=None, namespace=None, template_definition=None, template_file=None, template_name=None, parameters=None, debug=None):
         self.kubeconfig = kubeconfig
         self.context = context
         self.namespace = namespace
         self.parameters = parameters
         self.template_definition = template_definition
+        self.template_name = template_name
 
         # Loads as a dict, convert to a json string for piping to kubectl:
         self.template_file = template_file
@@ -97,6 +98,14 @@ class KubectlApplier(object):
             self._process_cmd_result(exit_code, stdout, stderr)
             if self.failed:
                 return
+        elif self.template_name:
+            self.debug_lines.append('template_name: %s' % self.template_name)
+            self.cmds.append(self.template_name)
+            exit_code, stdout, stderr = self.cmd_runner.run(self.cmds, None)
+            self._process_cmd_result(exit_code, stdout, stderr)
+            if self.failed:
+                return
+
 
     def _process_cmd_result(self, exit_code, stdout, stderr):
         self.stdout = stdout
@@ -136,6 +145,7 @@ class OcProcessModule(AnsibleModule):
             debug=dict(required=False, type='bool', default='false'),
             template_definition=dict(required=False, type='str'),
             template_file=dict(required=False, type='str'),
+            template_name=dict(required=False, type='str'),
             parameters=dict(required=False, type='dict'),
         ))
 
@@ -187,6 +197,7 @@ class OcProcessModule(AnsibleModule):
             namespace=self.params['namespace'],
             template_file=self.params['template_file'],
             template_definition=self.params['template_definition'],
+            template_name=self.params['template_name'],
             parameters=self.params['parameters'],
             debug=self.boolean(self.params['debug']))
 
